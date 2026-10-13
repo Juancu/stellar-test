@@ -62,12 +62,24 @@
 
       #sprite .head:not(.is-on) { visibility: hidden; }
 
-      #bubble {
+      .bubble {
         position: absolute;
         inset: 0;
         width: 100%;
         height: 100%;
         pointer-events: none;
+      }
+
+      #sphereJson {
+        width: 100%;
+        min-height: 190px;
+        resize: vertical;
+        padding: 8px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #0e1218;
+        color: var(--text);
+        font: 0.78rem/1.4 Consolas, monospace;
       }
 
       .sphere-actions {
@@ -164,12 +176,14 @@
   </head>
   <body>
     <div id="stage">
-      <canvas id="bubble"></canvas>
+      <canvas id="stars" class="bubble"></canvas>
+      <canvas id="bubbleBack" class="bubble"></canvas>
+      <canvas id="bubbleFront" class="bubble"></canvas>
     </div>
     <aside>
       <div>
         <h1>Sprite</h1>
-        <p>Drag the character. The hold point is (130, 50). The body hangs from (130, 120) and springs back as you move. A 120px glass sphere sits on that axis.</p>
+        <p>Drag the character. The hold point is (130, 50). The body hangs from (130, 120) and springs back as you move. Two glass spheres share that axis: one behind the sprite, one in front.</p>
       </div>
       <h2>Body</h2>
       <label>
@@ -196,44 +210,50 @@
       <h2>Head sphere</h2>
       <label>
         Position X
-        <output id="sphereXOut">0</output>
-        <input id="sphereX" type="range" min="-180" max="180" step="1" value="0" />
+        <output id="sphereXOut">-2</output>
+        <input id="sphereX" type="range" min="-180" max="180" step="1" value="-2" />
       </label>
       <label>
         Position Y
-        <output id="sphereYOut">0</output>
-        <input id="sphereY" type="range" min="-180" max="180" step="1" value="0" />
+        <output id="sphereYOut">-37</output>
+        <input id="sphereY" type="range" min="-180" max="180" step="1" value="-37" />
       </label>
       <label>
         Position Z
-        <output id="sphereZOut">0</output>
-        <input id="sphereZ" type="range" min="-180" max="180" step="1" value="0" />
+        <output id="sphereZOut">-41</output>
+        <input id="sphereZ" type="range" min="-180" max="180" step="1" value="-41" />
       </label>
       <label>
         Scale X
-        <output id="scaleXOut">1.00</output>
-        <input id="scaleX" type="range" min="0.05" max="3" step="0.01" value="1" />
+        <output id="scaleXOut">1.45</output>
+        <input id="scaleX" type="range" min="0.05" max="3" step="0.01" value="1.45" />
       </label>
       <label>
         Scale Y
-        <output id="scaleYOut">1.00</output>
-        <input id="scaleY" type="range" min="0.05" max="3" step="0.01" value="1" />
+        <output id="scaleYOut">1.24</output>
+        <input id="scaleY" type="range" min="0.05" max="3" step="0.01" value="1.24" />
       </label>
       <label>
         Scale Z
-        <output id="scaleZOut">1.00</output>
-        <input id="scaleZ" type="range" min="0.05" max="3" step="0.01" value="1" />
+        <output id="scaleZOut">0.68</output>
+        <input id="scaleZ" type="range" min="0.05" max="3" step="0.01" value="0.68" />
       </label>
       <label>
-        Transparency
-        <output id="transparencyOut">55%</output>
-        <input id="transparency" type="range" min="0" max="1" step="0.01" value="0.55" />
+        Transparency behind
+        <output id="transparencyBackOut">44%</output>
+        <input id="transparencyBack" type="range" min="0" max="1" step="0.01" value="0.44" />
+      </label>
+      <label>
+        Transparency in front
+        <output id="transparencyFrontOut">91%</output>
+        <input id="transparencyFront" type="range" min="0" max="1" step="0.01" value="0.91" />
       </label>
       <label>
         Color
-        <output id="sphereColorOut">#8ecaff</output>
-        <input id="sphereColor" type="color" value="#8ecaff" />
+        <output id="sphereColorOut">#003666</output>
+        <input id="sphereColor" type="color" value="#003666" />
       </label>
+      <textarea id="sphereJson" spellcheck="false" aria-label="Sphere JSON"></textarea>
       <div class="sphere-actions">
         <button type="button" id="exportSphere">Export JSON</button>
         <label>
@@ -263,30 +283,38 @@
       const scaleXInput = document.getElementById('scaleX');
       const scaleYInput = document.getElementById('scaleY');
       const scaleZInput = document.getElementById('scaleZ');
-      const transparencyInput = document.getElementById('transparency');
+      const transparencyBackInput = document.getElementById('transparencyBack');
+      const transparencyFrontInput = document.getElementById('transparencyFront');
       const sphereColorInput = document.getElementById('sphereColor');
+      const sphereJson = document.getElementById('sphereJson');
       const tiltReadout = document.getElementById('tiltReadout');
       const errorEl = document.getElementById('error');
-      const bubble = window.HeadSphere
-        ? HeadSphere.createHeadSphere(document.getElementById('bubble'))
+      const frontCanvas = document.getElementById('bubbleFront');
+      const bubbleBack = window.HeadSphere
+        ? HeadSphere.createHeadSphere(document.getElementById('bubbleBack'))
         : null;
+      const bubbleFront = window.HeadSphere
+        ? HeadSphere.createHeadSphere(frontCanvas)
+        : null;
+      let editingJson = false;
 
       const params = {
         maxTilt: 15,
         spring: 60,
         damping: 7,
         sway: 1,
-        sphereX: 0,
-        sphereY: 0,
-        sphereZ: 0,
-        scaleX: 1,
-        scaleY: 1,
-        scaleZ: 1,
-        transparency: 0.55,
-        sphereColor: '#8ecaff',
+        sphereX: -2,
+        sphereY: -37,
+        sphereZ: -41,
+        scaleX: 1.45,
+        scaleY: 1.24,
+        scaleZ: 0.68,
+        transparencyBack: 0.44,
+        transparencyFront: 0.91,
+        sphereColor: '#003666',
       };
 
-      function syncOutputs() {
+      function syncOutputs(keepJson) {
         params.maxTilt = Number(maxTiltInput.value);
         params.spring = Number(springInput.value);
         params.damping = Number(dampingInput.value);
@@ -297,7 +325,8 @@
         params.scaleX = Number(scaleXInput.value);
         params.scaleY = Number(scaleYInput.value);
         params.scaleZ = Number(scaleZInput.value);
-        params.transparency = Number(transparencyInput.value);
+        params.transparencyBack = Number(transparencyBackInput.value);
+        params.transparencyFront = Number(transparencyFrontInput.value);
         params.sphereColor = sphereColorInput.value;
         document.getElementById('maxTiltOut').textContent = `${params.maxTilt.toFixed(1)}°`;
         document.getElementById('springOut').textContent = params.spring.toFixed(0);
@@ -309,15 +338,23 @@
         document.getElementById('scaleXOut').textContent = params.scaleX.toFixed(2);
         document.getElementById('scaleYOut').textContent = params.scaleY.toFixed(2);
         document.getElementById('scaleZOut').textContent = params.scaleZ.toFixed(2);
-        document.getElementById('transparencyOut').textContent = `${Math.round(params.transparency * 100)}%`;
+        document.getElementById('transparencyBackOut').textContent = `${Math.round(params.transparencyBack * 100)}%`;
+        document.getElementById('transparencyFrontOut').textContent = `${Math.round(params.transparencyFront * 100)}%`;
         document.getElementById('sphereColorOut').textContent = params.sphereColor;
+        if (!keepJson && !editingJson) sphereJson.value = JSON.stringify(spherePreset(), null, 2);
+      }
+
+      function cssColor(value) {
+        const hex = String(value).trim().replace(/^#/, '');
+        return `#${(hex.length >= 6 ? hex.slice(0, 6) : hex.padStart(6, '0')).toLowerCase()}`;
       }
 
       function spherePreset() {
         return {
           position: { x: params.sphereX, y: params.sphereY, z: params.sphereZ },
           scale: { x: params.scaleX, y: params.scaleY, z: params.scaleZ },
-          transparency: params.transparency,
+          transparencyBack: params.transparencyBack,
+          transparencyFront: params.transparencyFront,
           color: params.sphereColor,
         };
       }
@@ -331,9 +368,13 @@
         if (scale.x != null) scaleXInput.value = scale.x;
         if (scale.y != null) scaleYInput.value = scale.y;
         if (scale.z != null) scaleZInput.value = scale.z;
-        if (data.transparency != null) transparencyInput.value = data.transparency;
-        if (data.color) sphereColorInput.value = data.color;
-        syncOutputs();
+        const shared = data.transparency;
+        if (data.transparencyBack != null) transparencyBackInput.value = data.transparencyBack;
+        else if (shared != null) transparencyBackInput.value = shared;
+        if (data.transparencyFront != null) transparencyFrontInput.value = data.transparencyFront;
+        else if (shared != null) transparencyFrontInput.value = shared;
+        if (data.color) sphereColorInput.value = cssColor(data.color);
+        syncOutputs(editingJson);
       }
 
       document.getElementById('exportSphere').addEventListener('click', () => {
@@ -362,10 +403,30 @@
         maxTiltInput, springInput, dampingInput, swayInput,
         sphereXInput, sphereYInput, sphereZInput,
         scaleXInput, scaleYInput, scaleZInput,
-        transparencyInput, sphereColorInput,
+        transparencyBackInput, transparencyFrontInput, sphereColorInput,
       ]) {
-        input.addEventListener('input', syncOutputs);
+        input.addEventListener('input', () => syncOutputs());
       }
+      sphereJson.addEventListener('focus', () => { editingJson = true; });
+      sphereJson.addEventListener('input', () => {
+        try {
+          applySpherePreset(JSON.parse(sphereJson.value));
+          errorEl.hidden = true;
+        } catch {
+          errorEl.hidden = true;
+        }
+      });
+      sphereJson.addEventListener('blur', () => {
+        editingJson = false;
+        try {
+          applySpherePreset(JSON.parse(sphereJson.value));
+          errorEl.hidden = true;
+        } catch {
+          errorEl.hidden = false;
+          errorEl.textContent = 'That JSON could not be read.';
+        }
+        syncOutputs();
+      });
       syncOutputs();
 
       function loadImage(src) {
@@ -583,6 +644,54 @@
       stage.addEventListener('pointerup', release);
       stage.addEventListener('pointercancel', release);
 
+      const starCanvas = document.getElementById('stars');
+      const starCtx = starCanvas.getContext('2d');
+      const STAR_LAYERS = [
+        { speed: 10, parallax: 0.05, count: 80, size: 1.1, alpha: 0.38 },
+        { speed: 26, parallax: 0.14, count: 48, size: 1.6, alpha: 0.62 },
+        { speed: 52, parallax: 0.32, count: 26, size: 2.2, alpha: 0.9 },
+      ];
+
+      function seedStars(layer, w, h) {
+        layer.stars = Array.from({ length: layer.count }, () => ({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          r: layer.size * (0.55 + Math.random() * 0.7),
+        }));
+        layer.spanW = w;
+        layer.spanH = h;
+      }
+
+      function drawStars(dt) {
+        const w = stage.clientWidth;
+        const h = stage.clientHeight;
+        if (w < 2 || h < 2) return;
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        const bw = Math.floor(w * dpr);
+        const bh = Math.floor(h * dpr);
+        if (starCanvas.width !== bw || starCanvas.height !== bh) {
+          starCanvas.width = bw;
+          starCanvas.height = bh;
+          starCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        const originX = (w - width) / 2;
+        const originY = (h - height) / 2;
+        const shiftX = spriteX - originX;
+        const shiftY = spriteY - originY;
+        starCtx.clearRect(0, 0, w, h);
+        for (const layer of STAR_LAYERS) {
+          if (!layer.stars || layer.spanW !== w || layer.spanH !== h) seedStars(layer, w, h);
+          starCtx.fillStyle = `rgba(236, 242, 255, ${layer.alpha})`;
+          for (const star of layer.stars) {
+            star.x -= layer.speed * dt;
+            if (star.x < 0) star.x += w;
+            const x = ((star.x - shiftX * layer.parallax) % w + w) % w;
+            const y = ((star.y - shiftY * layer.parallax) % h + h) % h;
+            starCtx.fillRect(x, y, star.r, star.r);
+          }
+        }
+      }
+
       function step(now) {
         requestAnimationFrame(step);
         if (!spriteEl) return;
@@ -608,21 +717,22 @@
         bodyEl.style.transform = `rotate(${angle}rad)`;
         tiltReadout.textContent = `Tilt ${(angle * 180 / Math.PI).toFixed(1)}°`;
 
+        drawStars(dt);
         if (now >= nextBlink && now >= blinkUntil) blinkNow(now);
         setEyes(now < blinkUntil);
-        if (bubble) {
-          bubble.render({
-            screenX: spriteX + AXIS_X + params.sphereX,
-            screenY: spriteY + AXIS_Y + params.sphereY,
-            z: params.sphereZ,
-            scaleX: params.scaleX,
-            scaleY: params.scaleY,
-            scaleZ: params.scaleZ,
-            opacity: 1 - params.transparency,
-            color: params.sphereColor,
-            dt,
-          });
-        }
+        const sphere = (opacity) => ({
+          screenX: spriteX + AXIS_X + params.sphereX,
+          screenY: spriteY + AXIS_Y + params.sphereY,
+          z: params.sphereZ,
+          scaleX: params.scaleX,
+          scaleY: params.scaleY,
+          scaleZ: params.scaleZ,
+          opacity,
+          color: params.sphereColor,
+          dt,
+        });
+        if (bubbleBack) bubbleBack.render(sphere(1 - params.transparencyBack));
+        if (bubbleFront) bubbleFront.render(sphere(1 - params.transparencyFront));
       }
 
       async function boot() {
@@ -659,6 +769,7 @@
           spriteEl.append(bodyEl, headOpen, headShut);
           bodyEl.style.transformOrigin = `${AXIS_X}px ${AXIS_Y}px`;
           stage.append(spriteEl);
+          stage.append(frontCanvas);
 
           const rect = stage.getBoundingClientRect();
           place((rect.width - width) / 2, (rect.height - height) / 2);
