@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sprite animation</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #10131a;
+        --panel: #171b24;
+        --line: rgba(186, 204, 224, 0.22);
+        --text: #e7eef8;
+        --muted: #9aabbf;
+        --gold: #e4c48a;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", Trebuchet MS, sans-serif;
+      }
+
+      body {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        min-height: 100%;
+      }
+
+      #stage {
+        position: relative;
+        overflow: hidden;
+        touch-action: none;
+        cursor: default;
+        background:
+          radial-gradient(circle at 50% 40%, rgba(80, 110, 150, 0.08), transparent 55%),
+          var(--bg);
+      }
+
+      #stage.is-grab { cursor: grabbing; }
+      #stage.is-hot { cursor: grab; }
+
+      #sprite {
+        position: absolute;
+        left: 0;
+        top: 0;
+        transform-origin: 0 0;
+      }
+
+      #sprite img {
+        position: absolute;
+        left: 0;
+        top: 0;
+        pointer-events: none;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
+
+      #sprite .head:not(.is-on) { visibility: hidden; }
+
+      #bubble {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      .sphere-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .sphere-actions button,
+      .sphere-actions label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        margin: 0;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--gold);
+        background: transparent;
+        color: var(--gold);
+        font: inherit;
+        font-size: 0.82rem;
+        cursor: pointer;
+      }
+
+      .sphere-actions label input { display: none; }
+
+      aside {
+        background: var(--panel);
+        border-left: 1px solid var(--line);
+        padding: 18px 16px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        overflow: auto;
+      }
+
+      h2 {
+        margin: 8px 0 0;
+        font-size: 0.72rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.15rem;
+        letter-spacing: 0.04em;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.86rem;
+        line-height: 1.4;
+      }
+
+      label {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 4px 12px;
+        font-size: 0.82rem;
+      }
+
+      label output {
+        color: var(--gold);
+        font-variant-numeric: tabular-nums;
+      }
+
+      input[type="range"],
+      input[type="color"] {
+        grid-column: 1 / -1;
+        width: 100%;
+        accent-color: var(--gold);
+      }
+
+      input[type="color"] {
+        height: 28px;
+        padding: 0;
+        border: 1px solid var(--line);
+        background: transparent;
+      }
+
+      #tiltReadout {
+        margin-top: auto;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #error {
+        color: #ffb4b4;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <canvas id="bubble"></canvas>
+    </div>
+    <aside>
+      <div>
+        <h1>Sprite</h1>
+        <p>Drag the character. The hold point is (130, 50). The body hangs from (130, 120) and springs back as you move. A 120px glass sphere sits on that axis.</p>
+      </div>
+      <h2>Body</h2>
+      <label>
+        Max tilt
+        <output id="maxTiltOut">15°</output>
+        <input id="maxTilt" type="range" min="0" max="45" step="0.5" value="15" />
+      </label>
+      <label>
+        Spring
+        <output id="springOut">60</output>
+        <input id="spring" type="range" min="5" max="220" step="1" value="60" />
+      </label>
+      <label>
+        Damping
+        <output id="dampingOut">7</output>
+        <input id="damping" type="range" min="0" max="40" step="0.1" value="7" />
+      </label>
+      <label>
+        Sway
+        <output id="swayOut">1.00</output>
+        <input id="sway" type="range" min="0" max="3" step="0.01" value="1" />
+      </label>
+      <p id="tiltReadout">Tilt 0.0°</p>
+      <h2>Head sphere</h2>
+      <label>
+        Position X
+        <output id="sphereXOut">0</output>
+        <input id="sphereX" type="range" min="-180" max="180" step="1" value="0" />
+      </label>
+      <label>
+        Position Y
+        <output id="sphereYOut">0</output>
+        <input id="sphereY" type="range" min="-180" max="180" step="1" value="0" />
+      </label>
+      <label>
+        Position Z
+        <output id="sphereZOut">0</output>
+        <input id="sphereZ" type="range" min="-180" max="180" step="1" value="0" />
+      </label>
+      <label>
+        Scale X
+        <output id="scaleXOut">1.00</output>
+        <input id="scaleX" type="range" min="0.05" max="3" step="0.01" value="1" />
+      </label>
+      <label>
+        Scale Y
+        <output id="scaleYOut">1.00</output>
+        <input id="scaleY" type="range" min="0.05" max="3" step="0.01" value="1" />
+      </label>
+      <label>
+        Scale Z
+        <output id="scaleZOut">1.00</output>
+        <input id="scaleZ" type="range" min="0.05" max="3" step="0.01" value="1" />
+      </label>
+      <label>
+        Transparency
+        <output id="transparencyOut">55%</output>
+        <input id="transparency" type="range" min="0" max="1" step="0.01" value="0.55" />
+      </label>
+      <label>
+        Color
+        <output id="sphereColorOut">#8ecaff</output>
+        <input id="sphereColor" type="color" value="#8ecaff" />
+      </label>
+      <div class="sphere-actions">
+        <button type="button" id="exportSphere">Export JSON</button>
+        <label>
+          Import JSON
+          <input id="importSphere" type="file" accept="application/json,.json" />
+        </label>
+      </div>
+      <p id="error" hidden></p>
+    </aside>
+    <script src="js/head-sphere.bundle.js"></script>
+    <script>
+      const GRAB_X = 130;
+      const GRAB_Y = 50;
+      const AXIS_X = 130;
+      const AXIS_Y = 120;
+      const BLINK_EVERY = 3200;
+      const BLINK_HOLD = 140;
+
+      const stage = document.getElementById('stage');
+      const maxTiltInput = document.getElementById('maxTilt');
+      const springInput = document.getElementById('spring');
+      const dampingInput = document.getElementById('damping');
+      const swayInput = document.getElementById('sway');
+      const sphereXInput = document.getElementById('sphereX');
+      const sphereYInput = document.getElementById('sphereY');
+      const sphereZInput = document.getElementById('sphereZ');
+      const scaleXInput = document.getElementById('scaleX');
+      const scaleYInput = document.getElementById('scaleY');
+      const scaleZInput = document.getElementById('scaleZ');
+      const transparencyInput = document.getElementById('transparency');
+      const sphereColorInput = document.getElementById('sphereColor');
+      const tiltReadout = document.getElementById('tiltReadout');
+      const errorEl = document.getElementById('error');
+      const bubble = window.HeadSphere
+        ? HeadSphere.createHeadSphere(document.getElementById('bubble'))
+        : null;
+
+      const params = {
+        maxTilt: 15,
+        spring: 60,
+        damping: 7,
+        sway: 1,
+        sphereX: 0,
+        sphereY: 0,
+        sphereZ: 0,
+        scaleX: 1,
+        scaleY: 1,
+        scaleZ: 1,
+        transparency: 0.55,
+        sphereColor: '#8ecaff',
+      };
+
+      function syncOutputs() {
+        params.maxTilt = Number(maxTiltInput.value);
+        params.spring = Number(springInput.value);
+        params.damping = Number(dampingInput.value);
+        params.sway = Number(swayInput.value);
+        params.sphereX = Number(sphereXInput.value);
+        params.sphereY = Number(sphereYInput.value);
+        params.sphereZ = Number(sphereZInput.value);
+        params.scaleX = Number(scaleXInput.value);
+        params.scaleY = Number(scaleYInput.value);
+        params.scaleZ = Number(scaleZInput.value);
+        params.transparency = Number(transparencyInput.value);
+        params.sphereColor = sphereColorInput.value;
+        document.getElementById('maxTiltOut').textContent = `${params.maxTilt.toFixed(1)}°`;
+        document.getElementById('springOut').textContent = params.spring.toFixed(0);
+        document.getElementById('dampingOut').textContent = params.damping.toFixed(1);
+        document.getElementById('swayOut').textContent = params.sway.toFixed(2);
+        document.getElementById('sphereXOut').textContent = params.sphereX.toFixed(0);
+        document.getElementById('sphereYOut').textContent = params.sphereY.toFixed(0);
+        document.getElementById('sphereZOut').textContent = params.sphereZ.toFixed(0);
+        document.getElementById('scaleXOut').textContent = params.scaleX.toFixed(2);
+        document.getElementById('scaleYOut').textContent = params.scaleY.toFixed(2);
+        document.getElementById('scaleZOut').textContent = params.scaleZ.toFixed(2);
+        document.getElementById('transparencyOut').textContent = `${Math.round(params.transparency * 100)}%`;
+        document.getElementById('sphereColorOut').textContent = params.sphereColor;
+      }
+
+      function spherePreset() {
+        return {
+          position: { x: params.sphereX, y: params.sphereY, z: params.sphereZ },
+          scale: { x: params.scaleX, y: params.scaleY, z: params.scaleZ },
+          transparency: params.transparency,
+          color: params.sphereColor,
+        };
+      }
+
+      function applySpherePreset(data) {
+        const position = data.position || {};
+        const scale = data.scale || {};
+        if (position.x != null) sphereXInput.value = position.x;
+        if (position.y != null) sphereYInput.value = position.y;
+        if (position.z != null) sphereZInput.value = position.z;
+        if (scale.x != null) scaleXInput.value = scale.x;
+        if (scale.y != null) scaleYInput.value = scale.y;
+        if (scale.z != null) scaleZInput.value = scale.z;
+        if (data.transparency != null) transparencyInput.value = data.transparency;
+        if (data.color) sphereColorInput.value = data.color;
+        syncOutputs();
+      }
+
+      document.getElementById('exportSphere').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(spherePreset(), null, 2) + '\n'], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'sphere.json';
+        link.click();
+        URL.revokeObjectURL(url);
+      });
+
+      document.getElementById('importSphere').addEventListener('change', async (event) => {
+        const file = event.target.files && event.target.files[0];
+        event.target.value = '';
+        if (!file) return;
+        try {
+          applySpherePreset(JSON.parse(await file.text()));
+        } catch (err) {
+          errorEl.hidden = false;
+          errorEl.textContent = 'That file is not a sphere preset.';
+        }
+      });
+
+      for (const input of [
+        maxTiltInput, springInput, dampingInput, swayInput,
+        sphereXInput, sphereYInput, sphereZInput,
+        scaleXInput, scaleYInput, scaleZInput,
+        transparencyInput, sphereColorInput,
+      ]) {
+        input.addEventListener('input', syncOutputs);
+      }
+      syncOutputs();
+
+      function loadImage(src) {
+        return new Promise((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error(`Could not load ${src}`));
+          image.src = src;
+        });
+      }
+
+      function u32(bytes, offset) {
+        return ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>> 0;
+      }
+
+      async function inflate(bytes, format) {
+        const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream(format));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+      }
+
+      function paeth(a, b, c) {
+        const p = a + b - c;
+        const pa = Math.abs(p - a);
+        const pb = Math.abs(p - b);
+        const pc = Math.abs(p - c);
+        if (pa <= pb && pa <= pc) return a;
+        if (pb <= pc) return b;
+        return c;
+      }
+
+      function unfilter(raw, width, height, bpp) {
+        const stride = width * bpp;
+        const out = new Uint8Array(height * stride);
+        let i = 0;
+        for (let y = 0; y < height; y++) {
+          const filter = raw[i++];
+          const row = y * stride;
+          for (let x = 0; x < stride; x++) {
+            const left = x >= bpp ? out[row + x - bpp] : 0;
+            const up = y > 0 ? out[row - stride + x] : 0;
+            const ul = y > 0 && x >= bpp ? out[row - stride + x - bpp] : 0;
+            const value = raw[i++];
+            if (filter === 0) out[row + x] = value;
+            else if (filter === 1) out[row + x] = (value + left) & 255;
+            else if (filter === 2) out[row + x] = (value + up) & 255;
+            else if (filter === 3) out[row + x] = (value + ((left + up) >> 1)) & 255;
+            else if (filter === 4) out[row + x] = (value + paeth(left, up, ul)) & 255;
+            else throw new Error('Unsupported PNG filter');
+          }
+        }
+        return out;
+      }
+
+      async function pngAlpha(bytes) {
+        let offset = 8;
+        let width = 0;
+        let height = 0;
+        let bitDepth = 8;
+        let colorType = 6;
+        let interlace = 0;
+        let transparency = null;
+        const idat = [];
+        while (offset + 8 <= bytes.length) {
+          const length = u32(bytes, offset);
+          const type = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+          const data = bytes.subarray(offset + 8, offset + 8 + length);
+          if (type === 'IHDR') {
+            width = u32(data, 0);
+            height = u32(data, 4);
+            bitDepth = data[8];
+            colorType = data[9];
+            interlace = data[12];
+          } else if (type === 'tRNS') transparency = data;
+          else if (type === 'IDAT') idat.push(data);
+          else if (type === 'IEND') break;
+          offset += 12 + length;
+        }
+        if (bitDepth !== 8 || interlace !== 0) throw new Error('Unsupported PNG');
+        const zlib = new Uint8Array(idat.reduce((sum, chunk) => sum + chunk.length, 0));
+        let written = 0;
+        for (const chunk of idat) {
+          zlib.set(chunk, written);
+          written += chunk.length;
+        }
+        let raw;
+        try {
+          raw = await inflate(zlib, 'deflate');
+        } catch {
+          raw = await inflate(zlib.subarray(2, zlib.length - 4), 'deflate-raw');
+        }
+        const bpp = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[colorType];
+        if (!bpp) throw new Error('Unsupported PNG');
+        const pixels = unfilter(raw, width, height, bpp);
+        const alpha = new Uint8Array(width * height);
+        if (colorType === 6) {
+          for (let i = 0; i < alpha.length; i++) alpha[i] = pixels[i * 4 + 3];
+        } else if (colorType === 4) {
+          for (let i = 0; i < alpha.length; i++) alpha[i] = pixels[i * 2 + 1];
+        } else if (colorType === 3) {
+          for (let i = 0; i < alpha.length; i++) {
+            const index = pixels[i];
+            alpha[i] = transparency && index < transparency.length ? transparency[index] : 255;
+          }
+        } else {
+          alpha.fill(255);
+        }
+        return { width, height, alpha };
+      }
+
+      async function pngHit(src, fallbackW, fallbackH) {
+        try {
+          const response = await fetch(src);
+          if (!response.ok) throw new Error(response.statusText);
+          return await pngAlpha(new Uint8Array(await response.arrayBuffer()));
+        } catch {
+          return { width: fallbackW, height: fallbackH, alpha: null };
+        }
+      }
+
+      function opaqueAt(hit, x, y) {
+        const ix = Math.floor(x);
+        const iy = Math.floor(y);
+        if (!hit || ix < 0 || iy < 0 || ix >= hit.width || iy >= hit.height) return false;
+        if (!hit.alpha) return true;
+        return hit.alpha[iy * hit.width + ix] > 24;
+      }
+
+      let spriteX = 80;
+      let spriteY = 80;
+      let angle = 0;
+      let angleVel = 0;
+      let prevX = spriteX;
+      let prevVx = 0;
+      let dragging = false;
+      let eyesClosed = false;
+      let blinkUntil = 0;
+      let nextBlink = performance.now() + BLINK_EVERY;
+      let headOpen;
+      let headShut;
+      let bodyEl;
+      let spriteEl;
+      let headHit;
+      let bodyHit;
+      let width = 0;
+      let height = 0;
+
+      function place(x, y) {
+        spriteX = x;
+        spriteY = y;
+        spriteEl.style.transform = `translate(${x}px, ${y}px)`;
+      }
+
+      function setEyes(closed) {
+        if (eyesClosed === closed) return;
+        eyesClosed = closed;
+        headOpen.classList.toggle('is-on', !closed);
+        headShut.classList.toggle('is-on', closed);
+      }
+
+      function blinkNow(now) {
+        blinkUntil = now + BLINK_HOLD;
+        nextBlink = now + BLINK_EVERY;
+        setEyes(true);
+      }
+
+      function hitsCharacter(clientX, clientY) {
+        const rect = stage.getBoundingClientRect();
+        const localX = clientX - rect.left - spriteX;
+        const localY = clientY - rect.top - spriteY;
+        if (opaqueAt(headHit, localX, localY)) return true;
+        const dx = localX - AXIS_X;
+        const dy = localY - AXIS_Y;
+        const c = Math.cos(-angle);
+        const s = Math.sin(-angle);
+        const bx = AXIS_X + dx * c - dy * s;
+        const by = AXIS_Y + dx * s + dy * c;
+        return opaqueAt(bodyHit, bx, by);
+      }
+
+      function grabAt(clientX, clientY, resetVelocity) {
+        const rect = stage.getBoundingClientRect();
+        place(clientX - rect.left - GRAB_X, clientY - rect.top - GRAB_Y);
+        if (resetVelocity) {
+          prevX = spriteX;
+          prevVx = 0;
+        }
+      }
+
+      stage.addEventListener('pointerdown', (event) => {
+        if (!spriteEl || !hitsCharacter(event.clientX, event.clientY)) return;
+        dragging = true;
+        stage.classList.add('is-grab');
+        stage.setPointerCapture(event.pointerId);
+        grabAt(event.clientX, event.clientY, true);
+        blinkNow(performance.now());
+      });
+
+      stage.addEventListener('pointermove', (event) => {
+        if (!spriteEl) return;
+        if (dragging) {
+          grabAt(event.clientX, event.clientY, false);
+          return;
+        }
+        stage.classList.toggle('is-hot', hitsCharacter(event.clientX, event.clientY));
+      });
+
+      function release(event) {
+        if (!dragging) return;
+        dragging = false;
+        stage.classList.remove('is-grab');
+        if (stage.hasPointerCapture(event.pointerId)) stage.releasePointerCapture(event.pointerId);
+        stage.classList.toggle('is-hot', hitsCharacter(event.clientX, event.clientY));
+      }
+
+      stage.addEventListener('pointerup', release);
+      stage.addEventListener('pointercancel', release);
+
+      function step(now) {
+        requestAnimationFrame(step);
+        if (!spriteEl) return;
+        const dt = Math.min(0.033, (now - (step.last || now)) / 1000) || 0.016;
+        step.last = now;
+
+        const vx = (spriteX - prevX) / dt;
+        prevX = spriteX;
+        const max = (params.maxTilt * Math.PI) / 180;
+        const sway = params.sway * 0.00115;
+        const target = Math.max(-max, Math.min(max, -vx * sway));
+        const accel = params.spring * (target - angle) - params.damping * angleVel;
+        angleVel += accel * dt;
+        angle += angleVel * dt;
+        if (angle > max) {
+          angle = max;
+          if (angleVel > 0) angleVel = 0;
+        } else if (angle < -max) {
+          angle = -max;
+          if (angleVel < 0) angleVel = 0;
+        }
+        prevVx = vx;
+        bodyEl.style.transform = `rotate(${angle}rad)`;
+        tiltReadout.textContent = `Tilt ${(angle * 180 / Math.PI).toFixed(1)}°`;
+
+        if (now >= nextBlink && now >= blinkUntil) blinkNow(now);
+        setEyes(now < blinkUntil);
+        if (bubble) {
+          bubble.render({
+            screenX: spriteX + AXIS_X + params.sphereX,
+            screenY: spriteY + AXIS_Y + params.sphereY,
+            z: params.sphereZ,
+            scaleX: params.scaleX,
+            scaleY: params.scaleY,
+            scaleZ: params.scaleZ,
+            opacity: 1 - params.transparency,
+            color: params.sphereColor,
+            dt,
+          });
+        }
+      }
+
+      async function boot() {
+        try {
+          const [bodyImg, openImg, shutImg] = await Promise.all([
+            loadImage('img/b0.png'),
+            loadImage('img/h0.png'),
+            loadImage('img/h1.png'),
+          ]);
+          width = openImg.naturalWidth;
+          height = openImg.naturalHeight;
+          [bodyHit, headHit] = await Promise.all([
+            pngHit('img/b0.png', width, height),
+            pngHit('img/h0.png', width, height),
+          ]);
+
+          spriteEl = document.createElement('div');
+          spriteEl.id = 'sprite';
+          bodyEl = document.createElement('img');
+          bodyEl.id = 'body';
+          bodyEl.alt = '';
+          bodyEl.draggable = false;
+          bodyEl.src = bodyImg.src;
+          headOpen = document.createElement('img');
+          headOpen.className = 'head is-on';
+          headOpen.alt = '';
+          headOpen.draggable = false;
+          headOpen.src = openImg.src;
+          headShut = document.createElement('img');
+          headShut.className = 'head';
+          headShut.alt = '';
+          headShut.draggable = false;
+          headShut.src = shutImg.src;
+          spriteEl.append(bodyEl, headOpen, headShut);
+          bodyEl.style.transformOrigin = `${AXIS_X}px ${AXIS_Y}px`;
+          stage.append(spriteEl);
+
+          const rect = stage.getBoundingClientRect();
+          place((rect.width - width) / 2, (rect.height - height) / 2);
+          prevX = spriteX;
+          requestAnimationFrame(step);
+        } catch (err) {
+          errorEl.hidden = false;
+          errorEl.textContent = err.message;
+        }
+      }
+
+      boot();
+    </script>
+  </body>
+</html>
