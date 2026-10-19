@@ -46,9 +46,7 @@ button { cursor: pointer; }
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
 }
 
-.title-panel__tag {
-  margin: 14px auto 0;
-  max-width: 460px;
+.title-panel p.title-panel__tag {
   font-size: 1.15rem;
   color: var(--cream);
 }
@@ -60,7 +58,7 @@ button { cursor: pointer; }
   line-height: 1.45;
 }
 
-.title-panel__hook {
+.title-panel p.title-panel__hook {
   margin-bottom: 22px;
   font-style: italic;
   color: var(--cream);
